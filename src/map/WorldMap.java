@@ -85,6 +85,22 @@ public class WorldMap {
         int gridX = gridCoords[0];
         int gridY = gridCoords[1];
 
+        return isWallAtGrid(gridX, gridY);
+    }
+
+    /**
+     * Determines whether a grid-space cell contains a wall.
+     * Indices outside the grid boundaries are treated as walls,
+     * so callers stepping through the grid one cell at a time
+     * (such as a DDA raycasting loop) can query this method every
+     * iteration without a separate bounds check and without risking
+     * an out-of-bounds exception.
+     *
+     * @param gridX grid-space column index
+     * @param gridY grid-space row index
+     * @return true if the cell is a wall or out of bounds, false if the tile is empty space
+     */
+    public boolean isWallAtGrid(int gridX, int gridY) {
         if (gridX < 0 || gridX >= width || gridY < 0 || gridY >= height) {
             return true;
         }
@@ -95,7 +111,9 @@ public class WorldMap {
     /**
      * Retrieves the tile value at a given grid-space position.
      * Callers are expected to supply indices already validated as
-     * in-bounds, since raycasting steps along the grid one cell at a time.
+     * in-bounds — for example, by confirming the cell is a wall via
+     * isWallAtGrid before reading its type — since raycasting steps
+     * along the grid one cell at a time.
      *
      * @param x grid-space column index
      * @param y grid-space row index
