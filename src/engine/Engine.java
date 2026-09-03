@@ -5,6 +5,7 @@ import map.WorldMap;
 import player.Player;
 
 import java.awt.*;
+import java.awt.image.BufferStrategy;
 
 /**
  * Core game engine managing the game loop, update/render cycle, and subsystem coordination.
@@ -22,7 +23,13 @@ public class Engine {
      *  spin-wait to close the gap with sub-millisecond accuracy. */
     private static final long SLEEP_PRECISION_MARGIN_NANOS = 2_000_000L;
 
+    /** Number of buffers requested for the canvas's BufferStrategy.
+     *  Two buffers (double buffering) is standard for eliminating tearing
+     *  without the added input latency of triple buffering. */
+    private static final int BUFFER_COUNT = 2;
+
     private Canvas canvas;
+    private BufferStrategy bufferStrategy;
     private boolean running;
     private int fps;
 
@@ -86,9 +93,37 @@ public class Engine {
     }
 
     /**
+     * Requests a BufferStrategy on the canvas for double-buffered rendering.
+     * Must run after the canvas is added to a visible, displayable window;
+     * creation is retried in a short loop since the underlying native
+     * peer resources are not always available on the first attempt.
+     */
+    private void initBufferStrategy() {
+        canvas.createBufferStrategy(BUFFER_COUNT);
+        bufferStrategy = canvas.getBufferStrategy();
+
+        // BufferStrategy creation can silently fail to attach on the first
+        // call immediately after the peer becomes displayable; retrying
+        // guards against a null strategy reaching the render loop.
+        int attempts = 0;
+        while (bufferStrategy == null && attempts < 10) {
+            canvas.createBufferStrategy(BUFFER_COUNT);
+            bufferStrategy = canvas.getBufferStrategy();
+            attempts++;
+        }
+
+        if (bufferStrategy == null) {
+            throw new IllegalStateException(
+                    "Failed to create BufferStrategy; canvas may not be displayable yet."
+            );
+        }
+    }
+
+    /**
      * Starts the game loop.
      */
     public void start() {
+        initBufferStrategy();
         running = true;
         gameLoop();
     }
@@ -194,20 +229,34 @@ public class Engine {
     }
 
     /**
-     * Renders the current frame to the canvas: clears the frame, then
-     * draws the raycast projection of the test map from the player's
-     * current position and facing direction.
+     * Renders the current frame using the canvas's BufferStrategy: draws
+     * the cleared frame and raycast projection to an off-screen back
+     * buffer, then presents it in a single show() call. Presenting a
+     * fully-drawn buffer at once, instead of drawing incrementally to
+     * the on-screen graphics context, eliminates the tearing and flicker
+     * that direct Canvas.getGraphics() rendering is prone to.
      */
     private void render() {
-        Graphics2D g = (Graphics2D) canvas.getGraphics();
+        Graphics2D g = (Graphics2D) bufferStrategy.getDrawGraphics();
 
-        if (g == null) return; // Canvas not ready
+        try {
+            g.setColor(Color.BLACK);
+            g.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
 
-        g.setColor(Color.BLACK);
-        g.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
+            renderer.render(g, player, map);
+        } finally {
+            g.dispose();
+        }
 
-        renderer.render(g, player, map);
+        // Presents the completed back buffer; loops in case the buffer
+        // contents were lost (e.g. due to a display mode change) and
+        // needs to be redrawn and shown again to stay in sync.
+        do {
+            do {
+                bufferStrategy.show();
+            } while (bufferStrategy.contentsRestored());
+        } while (bufferStrategy.contentsLost());
 
-        g.dispose();
+        Toolkit.getDefaultToolkit().sync();
     }
 }
