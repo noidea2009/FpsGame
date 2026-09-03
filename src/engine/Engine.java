@@ -28,6 +28,12 @@ public class Engine {
      *  without the added input latency of triple buffering. */
     private static final int BUFFER_COUNT = 2;
 
+    /** Maximum redraw attempts per frame if the back buffer repeatedly
+     *  reports lost contents. Bounds render() so a persistently lost
+     *  buffer (e.g. minimized window) degrades a frame instead of
+     *  hanging the game loop indefinitely. */
+    private static final int MAX_BUFFER_RETRIES = 3;
+
     private Canvas canvas;
     private BufferStrategy bufferStrategy;
     private boolean running;
@@ -235,27 +241,30 @@ public class Engine {
      * fully-drawn buffer at once, instead of drawing incrementally to
      * the on-screen graphics context, eliminates the tearing and flicker
      * that direct Canvas.getGraphics() rendering is prone to.
+     *
+     * Draw and show are retried together, bounded by MAX_BUFFER_RETRIES,
+     * since a buffer reported as lost must be redrawn before it can be
+     * shown again; retrying show() alone on undrawn contents can loop
+     * indefinitely if the buffer keeps reporting as lost.
      */
     private void render() {
-        Graphics2D g = (Graphics2D) bufferStrategy.getDrawGraphics();
+        int attempts = 0;
 
-        try {
-            g.setColor(Color.BLACK);
-            g.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
-
-            renderer.render(g, player, map);
-        } finally {
-            g.dispose();
-        }
-
-        // Presents the completed back buffer; loops in case the buffer
-        // contents were lost (e.g. due to a display mode change) and
-        // needs to be redrawn and shown again to stay in sync.
         do {
-            do {
-                bufferStrategy.show();
-            } while (bufferStrategy.contentsRestored());
-        } while (bufferStrategy.contentsLost());
+            Graphics2D g = (Graphics2D) bufferStrategy.getDrawGraphics();
+
+            try {
+                g.setColor(Color.BLACK);
+                g.fillRect(0, 0, canvas.getWidth(), canvas.getHeight());
+
+                renderer.render(g, player, map);
+            } finally {
+                g.dispose();
+            }
+
+            bufferStrategy.show();
+            attempts++;
+        } while (bufferStrategy.contentsLost() && attempts < MAX_BUFFER_RETRIES);
 
         Toolkit.getDefaultToolkit().sync();
     }
