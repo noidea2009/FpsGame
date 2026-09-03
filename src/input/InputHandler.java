@@ -1,22 +1,33 @@
-package  input;
+package input;
 
 import javax.swing.*;
+import java.awt.Component;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.HashSet;
 import java.util.Set;
 
 /**
  * Made by Junjit Chang
- * Manages keyboard input state using Java's Key Bindings API.
- * This class tracks which keys are currently held down, preventing
- * issues common with standard KeyListeners like ghosting or stuck keys.
+ * Manages keyboard and mouse input state.
+ * Keyboard state uses Java's Key Bindings API, tracking which keys are
+ * currently held down and avoiding issues common with standard KeyListeners
+ * like ghosting or stuck keys. Mouse state tracks horizontal cursor movement
+ * for strafing and logs button clicks to the console.
  */
 public class InputHandler {
 
     /** Tracks the set of currently depressed keys. */
     // HashSet chosen for O(1) add/remove/contains on key codes without duplicate entries.
     private Set<Integer> keyStates = new HashSet<>();
+
+    /** Accumulated horizontal cursor movement, in pixels, since the last poll. */
+    private double mouseDeltaX = 0.0;
+
+    /** X coordinate of the most recently observed cursor position; null until the first mouse event arrives. */
+    private Integer lastMouseX = null;
 
     /**
      * Binds common game keys to the provided component.
@@ -73,5 +84,68 @@ public class InputHandler {
      */
     public boolean isKeyDown(int keyCode) {
         return keyStates.contains(keyCode);
+    }
+
+    /**
+     * Binds mouse movement and button-click listeners to the provided component.
+     * Horizontal cursor movement is accumulated for later retrieval via
+     * getMouseDeltaX(). Left and right button clicks are logged to the console
+     * to distinguish which button triggered the click.
+     *
+     * @param component the AWT or Swing component to receive mouse events
+     */
+    public void bindMouseInput(Component component) {
+        component.addMouseMotionListener(new MouseAdapter() {
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                recordMouseMovement(e.getX());
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                recordMouseMovement(e.getX());
+            }
+        });
+
+        component.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    System.out.println("left click");
+                } else if (SwingUtilities.isRightMouseButton(e)) {
+                    System.out.println("right click");
+                }
+            }
+        });
+    }
+
+    /**
+     * Updates the accumulated horizontal mouse delta from a newly observed
+     * cursor x position. The first observed position after binding (or after
+     * any gap with no prior position recorded) establishes a baseline rather
+     * than contributing to the delta, avoiding a spurious jump on the initial
+     * event.
+     *
+     * @param currentX x coordinate of the cursor, relative to the bound component
+     */
+    private void recordMouseMovement(int currentX) {
+        if (lastMouseX != null) {
+            mouseDeltaX += (currentX - lastMouseX);
+        }
+        lastMouseX = currentX;
+    }
+
+    /**
+     * Returns the horizontal mouse movement accumulated since the previous
+     * call to this method, then resets the accumulator to zero. Intended to
+     * be polled once per frame so each frame consumes only the movement that
+     * occurred during that frame.
+     *
+     * @return accumulated horizontal movement, in pixels, since the previous call; positive values indicate rightward movement
+     */
+    public double getMouseDeltaX() {
+        double delta = mouseDeltaX;
+        mouseDeltaX = 0.0;
+        return delta;
     }
 }
