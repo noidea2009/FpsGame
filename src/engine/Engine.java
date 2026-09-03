@@ -1,6 +1,7 @@
 package engine;
 
 import graphics.RaycasterRenderer;
+import input.InputHandler;
 import map.WorldMap;
 import player.Player;
 
@@ -45,12 +46,10 @@ public class Engine {
     private WorldMap map;
     private Player player;
     private RaycasterRenderer renderer;
+    private InputHandler input;
 
     /** Grid tile size, in world units, used by the hardcoded test map. */
     private static final int TEST_TILE_SIZE = 64;
-
-    /** Rotation speed, in radians per second, applied automatically for visual raycast verification. */
-    private static final double TEST_AUTO_ROTATE_SPEED = 0.4;
 
     /**
      * Constructs the engine with a rendering canvas.
@@ -66,10 +65,11 @@ public class Engine {
     }
 
     /**
-     * Builds a hardcoded test map, a player placed in open space, and a
-     * RaycasterRenderer sized to the canvas. Exists to give castRay() a
-     * known, inspectable scene to verify against before a real level
-     * loader or InputHandler wiring is in place.
+     * Builds a hardcoded test map, a player placed in open space, a
+     * RaycasterRenderer sized to the canvas, and an InputHandler bound to
+     * the canvas for mouse-driven strafing and click logging. Exists to
+     * give castRay() a known, inspectable scene to verify against before a
+     * real level loader is in place.
      */
     private void initTestScene() {
         int[][] testGrid = {
@@ -96,6 +96,9 @@ public class Engine {
         int screenHeight = 600;
         double fov = Math.toRadians(60);
         renderer = new RaycasterRenderer(screenWidth, screenHeight, fov);
+
+        input = new InputHandler();
+        input.bindMouseInput(canvas);
     }
 
     /**
@@ -222,16 +225,15 @@ public class Engine {
     }
 
     /**
-     * Updates game state based on delta time. The player is rotated
-     * automatically at a fixed rate so the raycast projection sweeps
-     * across the test map, making castRay() behavior at different
-     * angles and corners visible without InputHandler wiring.
+     * Updates game state for the frame by delegating to the player, which
+     * polls the InputHandler for key state and accumulated mouse movement
+     * and applies the corresponding movement, rotation, and strafe.
      *
      * @param deltaTime elapsed time since last frame in seconds, clamped
      *                  to {@link #MAX_DELTA_TIME}
      */
     private void update(double deltaTime) {
-        player.rotate(TEST_AUTO_ROTATE_SPEED * deltaTime);
+        player.update(map, input, deltaTime);
     }
 
     /**
