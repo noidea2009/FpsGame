@@ -2,12 +2,16 @@ package player;
 
 import input.InputHandler;
 import map.WorldMap;
+import util.CollisionDetector;
+
 import java.awt.event.KeyEvent;
 
 /**
  * Represents the player's position, facing direction, and movement state
- * within the world. Holds no rendering logic; exposes position and angle
- * for consumption by the renderer.
+ * within the world. Movement is checked against wall collision on each
+ * axis independently, allowing motion to continue along an unblocked axis
+ * even when the other axis is blocked. Holds no rendering logic; exposes
+ * position and angle for consumption by the renderer.
  */
 public class Player {
 
@@ -41,8 +45,7 @@ public class Player {
      * rotation for a single frame. Intended to be called once per game
      * loop iteration.
      *
-     * @param map world map, passed through to movement methods for future
-     *            collision checks
+     * @param map world map, passed through to movement methods for collision checks
      * @param input input handler providing current key state
      * @param dt elapsed time since the previous frame, in seconds
      */
@@ -68,63 +71,90 @@ public class Player {
     }
 
     /**
-     * Advances position along the current facing direction. The map
-     * parameter is unused in this milestone and reserved for wall
-     * collision checks introduced in a later development phase.
+     * Advances position along the current facing direction. The x and y
+     * components of the resulting displacement are applied independently,
+     * so contact with a wall on one axis does not prevent motion on the other.
      *
-     * @param map world map, reserved for future collision checks
+     * @param map world map used for collision checks
      * @param dt elapsed time since the previous frame, in seconds
      */
     public void moveForward(WorldMap map, double dt) {
         double distance = moveSpeed * dt;
-        x += Math.cos(directionAngle) * distance;
-        y += Math.sin(directionAngle) * distance;
+        double deltaX = Math.cos(directionAngle) * distance;
+        double deltaY = Math.sin(directionAngle) * distance;
+        applyMovement(deltaX, deltaY, map);
     }
 
     /**
-     * Moves position opposite to the current facing direction. The map
-     * parameter is unused in this milestone and reserved for wall
-     * collision checks introduced in a later development phase.
+     * Moves position opposite to the current facing direction. The x and y
+     * components of the resulting displacement are applied independently,
+     * so contact with a wall on one axis does not prevent motion on the other.
      *
-     * @param map world map, reserved for future collision checks
+     * @param map world map used for collision checks
      * @param dt elapsed time since the previous frame, in seconds
      */
     public void moveBackward(WorldMap map, double dt) {
         double distance = moveSpeed * dt;
-        x -= Math.cos(directionAngle) * distance;
-        y -= Math.sin(directionAngle) * distance;
+        double deltaX = -Math.cos(directionAngle) * distance;
+        double deltaY = -Math.sin(directionAngle) * distance;
+        applyMovement(deltaX, deltaY, map);
     }
 
     /**
-     * Moves position perpendicular to the facing direction, toward the
-     * left side. The map parameter is unused in this milestone and
-     * reserved for wall collision checks introduced in a later
-     * development phase.
+     * Moves position perpendicular to the facing direction, toward the left
+     * side. The x and y components of the resulting displacement are applied
+     * independently, so contact with a wall on one axis does not prevent
+     * motion on the other.
      *
-     * @param map world map, reserved for future collision checks
+     * @param map world map used for collision checks
      * @param dt elapsed time since the previous frame, in seconds
      */
     public void strafeLeft(WorldMap map, double dt) {
         double distance = moveSpeed * dt;
         double strafeAngle = directionAngle - Math.PI / 2;
-        x += Math.cos(strafeAngle) * distance;
-        y += Math.sin(strafeAngle) * distance;
+        double deltaX = Math.cos(strafeAngle) * distance;
+        double deltaY = Math.sin(strafeAngle) * distance;
+        applyMovement(deltaX, deltaY, map);
     }
 
     /**
-     * Moves position perpendicular to the facing direction, toward the
-     * right side. The map parameter is unused in this milestone and
-     * reserved for wall collision checks introduced in a later
-     * development phase.
+     * Moves position perpendicular to the facing direction, toward the right
+     * side. The x and y components of the resulting displacement are applied
+     * independently, so contact with a wall on one axis does not prevent
+     * motion on the other.
      *
-     * @param map world map, reserved for future collision checks
+     * @param map world map used for collision checks
      * @param dt elapsed time since the previous frame, in seconds
      */
     public void strafeRight(WorldMap map, double dt) {
         double distance = moveSpeed * dt;
         double strafeAngle = directionAngle + Math.PI / 2;
-        x += Math.cos(strafeAngle) * distance;
-        y += Math.sin(strafeAngle) * distance;
+        double deltaX = Math.cos(strafeAngle) * distance;
+        double deltaY = Math.sin(strafeAngle) * distance;
+        applyMovement(deltaX, deltaY, map);
+    }
+
+    /**
+     * Applies a candidate displacement to the current position, checking the
+     * x and y components against wall collision separately. Each axis commits
+     * only if the resulting position, combined with the position on the other
+     * axis at the time of the check, is free of wall overlap. This produces
+     * sliding contact along walls rather than a full stop on diagonal contact.
+     *
+     * @param deltaX candidate change in x coordinate, in world units
+     * @param deltaY candidate change in y coordinate, in world units
+     * @param map world map used for collision checks
+     */
+    private void applyMovement(double deltaX, double deltaY, WorldMap map) {
+        double candidateX = x + deltaX;
+        double candidateY = y + deltaY;
+
+        if (CollisionDetector.canMoveTo(candidateX, y, map)) {
+            x = candidateX;
+        }
+        if (CollisionDetector.canMoveTo(x, candidateY, map)) {
+            y = candidateY;
+        }
     }
 
     /**
