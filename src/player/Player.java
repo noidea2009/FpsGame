@@ -21,6 +21,9 @@ public class Player {
     private final double moveSpeed;
     private final double rotationSpeed;
 
+    /** World units of strafe displacement applied per pixel of horizontal mouse movement. */
+    private static final double MOUSE_STRAFE_SENSITIVITY = 0.5;
+
     /**
      * Constructs a Player with an initial position, facing angle, and
      * movement constants.
@@ -41,12 +44,14 @@ public class Player {
     }
 
     /**
-     * Polls current key state and applies the corresponding movement or
-     * rotation for a single frame. Intended to be called once per game
-     * loop iteration.
+     * Polls current key and mouse state and applies the corresponding
+     * movement, rotation, or strafe for a single frame. Horizontal mouse
+     * movement is consumed once per call and converted to an additional
+     * strafe displacement, on top of any keyboard-driven strafing. Intended
+     * to be called once per game loop iteration.
      *
      * @param map world map, passed through to movement methods for collision checks
-     * @param input input handler providing current key state
+     * @param input input handler providing current key state and accumulated mouse movement
      * @param dt elapsed time since the previous frame, in seconds
      */
     public void update(WorldMap map, InputHandler input, double dt) {
@@ -67,6 +72,11 @@ public class Player {
         }
         if (input.isKeyDown(KeyEvent.VK_RIGHT)) {
             rotate(rotationSpeed * dt);
+        }
+
+        double mouseDeltaX = input.getMouseDeltaX();
+        if (mouseDeltaX != 0.0) {
+            strafeByDistance(mouseDeltaX * MOUSE_STRAFE_SENSITIVITY, map);
         }
     }
 
@@ -102,32 +112,40 @@ public class Player {
 
     /**
      * Moves position perpendicular to the facing direction, toward the left
-     * side. The x and y components of the resulting displacement are applied
-     * independently, so contact with a wall on one axis does not prevent
-     * motion on the other.
+     * side, at the configured move speed.
      *
      * @param map world map used for collision checks
      * @param dt elapsed time since the previous frame, in seconds
      */
     public void strafeLeft(WorldMap map, double dt) {
-        double distance = moveSpeed * dt;
-        double strafeAngle = directionAngle - Math.PI / 2;
-        double deltaX = Math.cos(strafeAngle) * distance;
-        double deltaY = Math.sin(strafeAngle) * distance;
-        applyMovement(deltaX, deltaY, map);
+        strafeByDistance(-moveSpeed * dt, map);
     }
 
     /**
      * Moves position perpendicular to the facing direction, toward the right
-     * side. The x and y components of the resulting displacement are applied
-     * independently, so contact with a wall on one axis does not prevent
-     * motion on the other.
+     * side, at the configured move speed.
      *
      * @param map world map used for collision checks
      * @param dt elapsed time since the previous frame, in seconds
      */
     public void strafeRight(WorldMap map, double dt) {
-        double distance = moveSpeed * dt;
+        strafeByDistance(moveSpeed * dt, map);
+    }
+
+    /**
+     * Moves position perpendicular to the facing direction by a signed
+     * distance. A positive distance strafes toward the right side of the
+     * facing direction; a negative distance strafes toward the left. Shared
+     * by keyboard-driven strafing (fixed magnitude, sign by key) and
+     * mouse-driven strafing (magnitude and sign derived from cursor delta).
+     * The x and y components of the resulting displacement are applied
+     * independently through applyMovement, so contact with a wall on one
+     * axis does not prevent motion on the other.
+     *
+     * @param distance signed strafe distance, in world units; positive is rightward, negative is leftward
+     * @param map world map used for collision checks
+     */
+    private void strafeByDistance(double distance, WorldMap map) {
         double strafeAngle = directionAngle + Math.PI / 2;
         double deltaX = Math.cos(strafeAngle) * distance;
         double deltaY = Math.sin(strafeAngle) * distance;
