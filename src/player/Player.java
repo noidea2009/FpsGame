@@ -21,9 +21,9 @@ public class Player {
     private final double moveSpeed;
     private final double rotationSpeed;
 
-    /** World units of strafe displacement applied per pixel of horizontal mouse movement. */
+    /** World units of rotation applied per pixel of horizontal mouse movement. */
     private static final double MOUSE_STRAFE_SENSITIVITY = 0.5;
-
+    private static final double MOUSE_ROTATION_SENSITIVITY = 0.005;
     /**
      * Constructs a Player with an initial position, facing angle, and
      * movement constants.
@@ -75,8 +75,9 @@ public class Player {
         }
 
         double mouseDeltaX = input.getMouseDeltaX();
+
         if (mouseDeltaX != 0.0) {
-            strafeByDistance(mouseDeltaX * MOUSE_STRAFE_SENSITIVITY, map);
+            rotate(mouseDeltaX * MOUSE_ROTATION_SENSITIVITY);
         }
     }
 

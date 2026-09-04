@@ -2,185 +2,378 @@ package input;
 
 import javax.swing.*;
 import java.awt.Component;
-import java.awt.event.ActionEvent;
-import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
-import java.awt.event.MouseAdapter;
-import java.awt.event.MouseEvent;
+import java.awt.event.*;
 import java.util.HashSet;
 import java.util.Set;
 
 /**
  * Made by Junjit Chang
- * Manages keyboard and mouse input state.
- * Keyboard state uses Java's Key Bindings API, tracking which keys are
- * currently held down and avoiding issues common with standard KeyListeners
- * like ghosting or stuck keys. Mouse state tracks horizontal cursor movement
- * for strafing and logs button clicks to the console.
+ *
+ * Manages FPS-style keyboard and mouse input.
+ *
+ * Keyboard:
+ * - Keys are tracked as "held" states.
+ * - W/A/S/D are intended for movement.
+ * - Arrow keys can be used for rotation.
+ * - SPACE and ESCAPE are also tracked.
+ *
+ * Mouse:
+ * - Mouse movement is treated as relative movement.
+ * - mouseDeltaX represents horizontal LOOK movement.
+ * - mouseDeltaY represents vertical LOOK movement.
+ * - Mouse movement does NOT directly move or strafe the player.
+ * - Mouse buttons are tracked as held states.
+ *
+ * The InputHandler only records input. Player is responsible for
+ * deciding how that input affects movement and camera rotation.
  */
 public class InputHandler {
 
-    /** Tracks the set of currently depressed keys. */
-    // HashSet chosen for O(1) add/remove/contains on key codes without duplicate entries.
-    private Set<Integer> keyStates = new HashSet<>();
+    /**
+     * Keys that are currently being held down.
+     *
+     * HashSet provides simple O(1) add/remove/contains operations
+     * while preventing duplicate key entries.
+     */
+    private final Set<Integer> keyStates = new HashSet<>();
 
-    /** Accumulated horizontal cursor movement, in pixels, since the last poll. */
+    /**
+     * Mouse buttons that are currently being held down.
+     *
+     * This allows the game to poll mouse buttons in the same way
+     * that it polls keyboard keys.
+     */
+    private final Set<Integer> mouseButtonStates = new HashSet<>();
+    private boolean ignoreNextMouseMovement = false;
+    /**
+     * Accumulated horizontal mouse movement since the previous poll.
+     *
+     * Positive = mouse moved right.
+     * Negative = mouse moved left.
+     *
+     * This is a LOOK delta, not a movement/strafe value.
+     */
     private double mouseDeltaX = 0.0;
 
-    /** X coordinate of the most recently observed cursor position; null until the first mouse event arrives. */
+    /**
+     * Accumulated vertical mouse movement since the previous poll.
+     *
+     * Positive = mouse moved down.
+     * Negative = mouse moved up.
+     *
+     * This can later be used for looking up/down.
+     */
+    private double mouseDeltaY = 0.0;
+
+    /**
+     * Previous mouse X position.
+     *
+     * Used to calculate relative mouse movement.
+     */
     private Integer lastMouseX = null;
 
     /**
-     * Binds common game keys to the provided component.
-     * @param component The JComponent (usually a JPanel) to bind keys to.
+     * Previous mouse Y position.
+     *
+     * Used to calculate relative mouse movement.
+     */
+    private Integer lastMouseY = null;
+
+
+    /**
+     * Binds the default FPS keyboard controls to a Swing component.
+     *
+     * Swing Key Bindings are used when the component is a JComponent.
+     *
+     * @param component Swing component receiving keyboard input.
      */
     public void bindDefaultKeys(JComponent component) {
+
+        // Movement keys
+        bindKey(component, "W", KeyEvent.VK_W);
+        bindKey(component, "A", KeyEvent.VK_A);
+        bindKey(component, "S", KeyEvent.VK_S);
+        bindKey(component, "D", KeyEvent.VK_D);
+
+        // Optional keyboard look controls
         bindKey(component, "LEFT", KeyEvent.VK_LEFT);
         bindKey(component, "RIGHT", KeyEvent.VK_RIGHT);
         bindKey(component, "UP", KeyEvent.VK_UP);
         bindKey(component, "DOWN", KeyEvent.VK_DOWN);
-        bindKey(component, "W", KeyEvent.VK_W);
-        bindKey(component, "S", KeyEvent.VK_S);
-        bindKey(component, "A", KeyEvent.VK_A);
-        bindKey(component, "D", KeyEvent.VK_D);
+
+        // Other common FPS/game controls
         bindKey(component, "SPACE", KeyEvent.VK_SPACE);
         bindKey(component, "ESCAPE", KeyEvent.VK_ESCAPE);
-
     }
 
+
     /**
-     * Binds the default game keys to an AWT Component such as Canvas.
+     * Binds the default keyboard controls to an AWT Component.
      *
-     * Canvas is not a JComponent, so Swing Key Bindings cannot be installed on it.
-     * This overload uses a KeyListener while keeping the existing Swing Key Bindings
-     * implementation above for JComponents.
+     * Canvas is not a JComponent, so Swing Key Bindings cannot be
+     * installed on it. In that case we use a KeyListener instead.
      *
-     * @param component the AWT component that should receive keyboard input
+     * The Canvas must be focusable and should request focus when
+     * the game starts so that it can receive keyboard input.
+     *
+     * @param component AWT or Swing component receiving input.
      */
     public void bindDefaultKeys(Component component) {
-        if (!(component instanceof JComponent)) {
-            component.addKeyListener(new KeyListener() {
-                @Override
-                public void keyPressed(KeyEvent e) {
-                    keyStates.add(e.getKeyCode());
-                }
 
-                @Override
-                public void keyReleased(KeyEvent e) {
-                    keyStates.remove(e.getKeyCode());
-                }
-
-                @Override
-                public void keyTyped(KeyEvent e) {
-                    // Game input is based on physical key codes, not typed characters.
-                }
-            });
-
-            component.setFocusable(true);
-        } else {
+        if (component instanceof JComponent) {
             bindDefaultKeys((JComponent) component);
+            return;
         }
+
+        component.addKeyListener(new KeyListener() {
+
+            @Override
+            public void keyPressed(KeyEvent e) {
+                keyStates.add(e.getKeyCode());
+            }
+
+            @Override
+            public void keyReleased(KeyEvent e) {
+                keyStates.remove(e.getKeyCode());
+            }
+
+            @Override
+            public void keyTyped(KeyEvent e) {
+                // Not used.
+                //
+                // FPS controls care about physical key presses,
+                // not typed characters.
+            }
+        });
+
+        // Canvas must be focusable to receive keyboard events.
+        component.setFocusable(true);
     }
 
+
     /**
-     * Maps a specific key code to pressed/released actions within the component's ActionMap.
-     * @param component The target component.
-     * @param key The string representation of the key.
-     * @param keyCode The KeyEvent constant (e.g., KeyEvent.VK_LEFT).
+     * Binds one keyboard key using Swing's InputMap/ActionMap system.
+     *
+     * Key presses add the key to keyStates.
+     * Key releases remove the key from keyStates.
+     *
+     * @param component Swing component receiving the binding.
+     * @param key String representation used by KeyStroke.
+     * @param keyCode KeyEvent constant representing the key.
      */
-    private void bindKey(JComponent component, String key, int keyCode) {
-        //This is important, else its a makeshift keylogger, and weird stuff happens to the memory
-        InputMap inputMap = component.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
+    private void bindKey(
+            JComponent component,
+            String key,
+            int keyCode) {
+
+        InputMap inputMap =
+                component.getInputMap(
+                        JComponent.WHEN_IN_FOCUSED_WINDOW);
+
         ActionMap actionMap = component.getActionMap();
 
-        // Register the press action
-        inputMap.put(KeyStroke.getKeyStroke("pressed " + key), key + "_pressed");
-        actionMap.put(key + "_pressed", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                keyStates.add(keyCode);
-            }
-        });
+        String pressedAction = key + "_pressed";
+        String releasedAction = key + "_released";
 
-        // Register the release action to remove the key from the set
-        inputMap.put(KeyStroke.getKeyStroke("released " + key), key + "_released");
-        actionMap.put(key + "_released", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                keyStates.remove(keyCode);
-            }
-        });
+        // Register key press.
+        inputMap.put(
+                KeyStroke.getKeyStroke("pressed " + key),
+                pressedAction);
+
+        actionMap.put(
+                pressedAction,
+                new AbstractAction() {
+                    @Override
+                    public void actionPerformed(ActionEvent e) {
+                        keyStates.add(keyCode);
+                    }
+                });
+
+        // Register key release.
+        inputMap.put(
+                KeyStroke.getKeyStroke("released " + key),
+                releasedAction);
+
+        actionMap.put(
+                releasedAction,
+                new AbstractAction() {
+                    @Override
+                    public void actionPerformed(ActionEvent e) {
+                        keyStates.remove(keyCode);
+                    }
+                });
     }
 
+
     /**
-     * Checks if a key is currently being held down.
-     * @param keyCode The KeyEvent constant to check.
-     * @return true if the key is in the set of pressed keys, false otherwise.
+     * Checks whether a keyboard key is currently held.
+     *
+     * This is intended to be polled by Player every game update.
+     *
+     * Example:
+     *
+     * if (input.isKeyDown(KeyEvent.VK_W)) {
+     *     // Move forward
+     * }
+     *
+     * @param keyCode KeyEvent constant.
+     * @return true if the key is currently held.
      */
     public boolean isKeyDown(int keyCode) {
         return keyStates.contains(keyCode);
     }
 
+
     /**
-     * Binds mouse movement and button-click listeners to the provided component.
-     * Horizontal cursor movement is accumulated for later retrieval via
-     * getMouseDeltaX(). Left and right button clicks are logged to the console
-     * to distinguish which button triggered the click.
+     * Binds FPS-style mouse input.
      *
-     * @param component the AWT or Swing component to receive mouse events
+     * Mouse movement is converted into relative X/Y deltas.
+     *
+     * IMPORTANT:
+     * Mouse movement is ONLY input for looking.
+     * It does not directly strafe or move the player.
+     *
+     * @param component Component receiving mouse events.
      */
     public void bindMouseInput(Component component) {
+
         component.addMouseMotionListener(new MouseAdapter() {
+
             @Override
             public void mouseMoved(MouseEvent e) {
-                recordMouseMovement(e.getX());
+                recordMouseMovement(e.getX(), e.getY());
             }
 
             @Override
             public void mouseDragged(MouseEvent e) {
-                recordMouseMovement(e.getX());
+                recordMouseMovement(e.getX(), e.getY());
             }
         });
+
 
         component.addMouseListener(new MouseAdapter() {
+
             @Override
-            public void mouseClicked(MouseEvent e) {
-                if (SwingUtilities.isLeftMouseButton(e)) {
-                    System.out.println("left click");
-                } else if (SwingUtilities.isRightMouseButton(e)) {
-                    System.out.println("right click");
-                }
+            public void mousePressed(MouseEvent e) {
+                mouseButtonStates.add(e.getButton());
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                mouseButtonStates.remove(e.getButton());
             }
         });
     }
 
+
     /**
-     * Updates the accumulated horizontal mouse delta from a newly observed
-     * cursor x position. The first observed position after binding (or after
-     * any gap with no prior position recorded) establishes a baseline rather
-     * than contributing to the delta, avoiding a spurious jump on the initial
-     * event.
+     * Calculates relative mouse movement.
      *
-     * @param currentX x coordinate of the cursor, relative to the bound component
+     * Unlike an ordinary desktop application, an FPS is interested
+     * in HOW FAR the mouse moved rather than WHERE the cursor is.
+     *
+     * Example:
+     *
+     * Mouse moves:
+     *
+     *     400 -> 405 -> 410
+     *
+     * The player receives:
+     *
+     *     +5, +5
+     *
+     * rather than an absolute cursor position of 410.
+     *
+     * @param currentX current cursor X position.
+     * @param currentY current cursor Y position.
      */
-    private void recordMouseMovement(int currentX) {
-        if (lastMouseX != null) {
-            mouseDeltaX += (currentX - lastMouseX);
+    private void recordMouseMovement(int currentX, int currentY) {
+
+        if (ignoreNextMouseMovement) {
+            lastMouseX = currentX;
+            lastMouseY = currentY;
+            ignoreNextMouseMovement = false;
+            return;
         }
+
+        if (lastMouseX != null && lastMouseY != null) {
+            mouseDeltaX += currentX - lastMouseX;
+            mouseDeltaY += currentY - lastMouseY;
+        }
+
         lastMouseX = currentX;
+        lastMouseY = currentY;
+    }
+    public void ignoreNextMouseMovement() {
+        ignoreNextMouseMovement = true;
     }
 
     /**
-     * Returns the horizontal mouse movement accumulated since the previous
-     * call to this method, then resets the accumulator to zero. Intended to
-     * be polled once per frame so each frame consumes only the movement that
-     * occurred during that frame.
+     * Returns accumulated horizontal mouse movement.
      *
-     * @return accumulated horizontal movement, in pixels, since the previous call; positive values indicate rightward movement
+     * The value is consumed when read and reset to zero.
+     *
+     * Player should use this value to rotate the player horizontally.
+     *
+     * @return horizontal mouse-look delta in pixels.
      */
-    public double getMouseDeltaX() {
+    public synchronized double getMouseDeltaX() {
+
         double delta = mouseDeltaX;
+
         mouseDeltaX = 0.0;
+
         return delta;
     }
+
+
+    /**
+     * Returns accumulated vertical mouse movement.
+     *
+     * The value is consumed when read and reset to zero.
+     *
+     * Player can use this value for looking up/down once
+     * vertical camera rotation is implemented.
+     *
+     * @return vertical mouse-look delta in pixels.
+     */
+    public synchronized double getMouseDeltaY() {
+
+        double delta = mouseDeltaY;
+
+        mouseDeltaY = 0.0;
+
+        return delta;
+    }
+
+
+    /**
+     * Checks whether a mouse button is currently held.
+     *
+     * Example:
+     *
+     * if (input.isMouseButtonDown(MouseEvent.BUTTON1)) {
+     *     // Fire weapon
+     * }
+     *
+     * @param button MouseEvent button constant.
+     * @return true if the button is currently held.
+     */
+    public boolean isMouseButtonDown(int button) {
+        return mouseButtonStates.contains(button);
+    }
+
+
+    /**
+     * Resets the mouse position baseline.
+     *
+     * This is useful when the mouse is captured/recentered by the
+     * engine. The next mouse event establishes a new baseline rather
+     * than causing a large unwanted camera rotation.
+     */
+    public synchronized void resetMousePosition() {
+        lastMouseX = null;
+        lastMouseY = null;
+    }
 }
+
