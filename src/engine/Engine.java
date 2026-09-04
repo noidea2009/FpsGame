@@ -5,19 +5,13 @@ import input.InputHandler;
 import map.WorldMap;
 import player.Player;
 
-import java.awt.Canvas;
-import java.awt.Color;
-import java.awt.Graphics2D;
+import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.awt.image.BufferStrategy;
 
-import java.awt.Cursor;
-import java.awt.Point;
-import java.awt.Robot;
-import java.awt.Toolkit;
 import java.awt.image.BufferedImage;
-import java.awt.IllegalComponentStateException;
-/**
+
+        /**
  * Main game engine.
  *
  * Handles:
@@ -38,14 +32,15 @@ public class Engine {
 
     private static final int TEST_TILE_SIZE = 64;
     private static final int TARGET_FPS = 60;
-    private int lastWidth;
-    private int lastHeight;
+    private int lastWidth = -1;
+    private int lastHeight = -1;
 
     private final Canvas canvas;
 
     private BufferStrategy bufferStrategy;
 
     private boolean running;
+    private boolean paused;
 
     private int fps;
     private long fpsSampleStart;
@@ -63,6 +58,7 @@ public class Engine {
     public Engine(Canvas canvas) {
         this.canvas = canvas;
         this.running = false;
+        this.paused=false;
         this.fps = TARGET_FPS;
 
         initTestScene();
@@ -87,6 +83,17 @@ public class Engine {
             System.err.println(
                     "FPS mouse capture unavailable: " + e.getMessage()
             );
+        }
+    }
+    private void togglePause() {
+
+        paused = !paused;
+
+        if (paused) {
+            releaseMouse();
+        } else {
+            canvas.requestFocus();
+            captureMouse();
         }
     }
 
@@ -153,20 +160,18 @@ public class Engine {
         createBufferStrategy();
 
         running = true;
+        paused = false;
 
         captureMouse();
 
         fpsSampleStart = System.nanoTime();
         framesThisSecond = 0;
-        lastWidth = canvas.getWidth();
-        lastHeight = canvas.getHeight();
-
-        renderer.resize(lastWidth, lastHeight);
 
         gameLoop();
 
         releaseMouse();
     }
+
 
     /**
      * Stops the game.
@@ -222,38 +227,43 @@ public class Engine {
             long currentTime = System.nanoTime();
 
             double deltaTime =
-                    (currentTime - previousTime) / 1_000_000_000.0;
+                    (currentTime - previousTime)
+                            / 1_000_000_000.0;
 
             previousTime = currentTime;
 
-            /*
-             * Prevent a long pause from causing the player to
-             * teleport when the game resumes.
-             */
-            deltaTime = Math.min(deltaTime, MAX_DELTA_TIME);
+            deltaTime =
+                    Math.min(
+                            deltaTime,
+                            MAX_DELTA_TIME
+                    );
+
+            handleInput();
 
             update(deltaTime);
+
             render();
 
-            if (mouseCaptured) {
+            if (mouseCaptured && !paused) {
                 recenterMouse();
             }
 
             updateFPS();
-            /*
-             * Cap the game at approximately 60 FPS.
-             */
+
             long frameTime =
                     System.nanoTime() - currentTime;
 
             long remainingNanos =
                     targetFrameTime - frameTime;
 
-            if (remainingNanos > SLEEP_PRECISION_MARGIN_NANOS) {
+            if (remainingNanos >
+                    SLEEP_PRECISION_MARGIN_NANOS) {
 
                 try {
+
                     long sleepMillis =
-                            (remainingNanos - SLEEP_PRECISION_MARGIN_NANOS)
+                            (remainingNanos -
+                                    SLEEP_PRECISION_MARGIN_NANOS)
                                     / 1_000_000L;
 
                     if (sleepMillis > 0) {
@@ -261,19 +271,19 @@ public class Engine {
                     }
 
                 } catch (InterruptedException e) {
+
                     Thread.currentThread().interrupt();
+
                     stop();
                 }
             }
+        }
+    }
 
-            /*
-             * ESCAPE is handled here rather than relying on
-             * Swing's ActionMap. Canvas uses AWT input.
-             * need to add resume function
-             */
-            if (input.isKeyDown(KeyEvent.VK_ESCAPE)) {
-                stop();
-            }
+            private void handleInput() {
+
+        if (input.wasKeyPressed(KeyEvent.VK_ESCAPE)) {
+            togglePause();
         }
     }
 
@@ -282,10 +292,57 @@ public class Engine {
      */
     private void update(double deltaTime) {
 
+        if (paused) {
+            return;
+        }
+
         player.update(
                 map,
                 input,
                 deltaTime
+        );
+    }
+
+    private void renderPauseOverlay(Graphics2D graphics) {
+
+        int width = canvas.getWidth();
+        int height = canvas.getHeight();
+
+        graphics.setColor(
+                new Color(0, 0, 0, 140)
+        );
+
+        graphics.fillRect(
+                0,
+                0,
+                width,
+                height
+        );
+
+        graphics.setColor(Color.WHITE);
+
+        graphics.setFont(
+                new Font(
+                        "Arial",
+                        Font.BOLD,
+                        Math.max(24, width / 25)
+                )
+        );
+
+        String text = "PAUSED";
+
+        int textWidth =
+                graphics.getFontMetrics()
+                        .stringWidth(text);
+
+        int textHeight =
+                graphics.getFontMetrics()
+                        .getAscent();
+
+        graphics.drawString(
+                text,
+                (width - textWidth) / 2,
+                (height + textHeight) / 2
         );
     }
 
@@ -298,17 +355,7 @@ public class Engine {
             return;
         }
 
-        int width = canvas.getWidth();
-        int height = canvas.getHeight();
-
-        if (width > 0 && height > 0 &&
-                (width != lastWidth || height != lastHeight)) {
-
-            renderer.resize(width, height);
-
-            lastWidth = width;
-            lastHeight = height;
-        }
+        updateRendererSize();
 
         Graphics2D graphics =
                 (Graphics2D) bufferStrategy.getDrawGraphics();
@@ -320,8 +367,8 @@ public class Engine {
             graphics.fillRect(
                     0,
                     0,
-                    width,
-                    height
+                    canvas.getWidth(),
+                    canvas.getHeight()
             );
 
             renderer.render(
@@ -330,12 +377,18 @@ public class Engine {
                     map
             );
 
+            if (paused) {
+                renderPauseOverlay(graphics);
+            }
+
         } finally {
+
             graphics.dispose();
         }
 
         bufferStrategy.show();
     }
+
 
     /**
      * Captures the mouse and hides the cursor.
@@ -420,6 +473,25 @@ public class Engine {
             framesThisSecond = 0;
             fpsSampleStart = currentTime;
         }
+    }
+
+    private void updateRendererSize() {
+
+        int width = canvas.getWidth();
+        int height = canvas.getHeight();
+
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+
+        if (width == lastWidth && height == lastHeight) {
+            return;
+        }
+
+        renderer.resize(width, height);
+
+        lastWidth = width;
+        lastHeight = height;
     }
 
     public int getFPS() {

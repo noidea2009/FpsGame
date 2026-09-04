@@ -7,31 +7,44 @@ import java.awt.*;
 
 /**
  * Entry point for the Tiny Raycaster FPS application.
- * Responsible for window initialization and game engine lifecycle.
+ *
+ * Game owns the application window and rendering surface.
+ * Engine owns the game lifecycle.
  */
 public class Game {
+
+    private static final int INITIAL_WIDTH = 800;
+    private static final int INITIAL_HEIGHT = 600;
 
     private JFrame frame;
     private Canvas canvas;
     private Engine engine;
 
     /**
-     * Initializes and displays the JFrame window and starts the game engine.
+     * Initializes the game window.
      */
     private void initWindow() {
 
         frame = new JFrame("Tiny Raycaster FPS");
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
-        // Create rendering surface
+        frame.setDefaultCloseOperation(
+                JFrame.EXIT_ON_CLOSE
+        );
+
         canvas = new Canvas();
 
         canvas.setPreferredSize(
-                new Dimension(800, 600)
+                new Dimension(
+                        INITIAL_WIDTH,
+                        INITIAL_HEIGHT
+                )
         );
 
         canvas.setMinimumSize(
-                new Dimension(640, 480)
+                new Dimension(
+                        640,
+                        480
+                )
         );
 
         canvas.setBackground(Color.BLACK);
@@ -39,9 +52,10 @@ public class Game {
 
         frame.add(canvas);
 
+        // Sizes the window around the Canvas.
         frame.pack();
 
-        // Allow the player to resize the window.
+        // The window is resizable by the user.
         frame.setResizable(true);
 
         frame.setLocationRelativeTo(null);
@@ -50,17 +64,17 @@ public class Game {
     }
 
     /**
-     * Starts the game engine and begins the game loop.
+     * Creates and starts the game engine.
      */
     private void start() {
+
         engine = new Engine(canvas);
+
         engine.start();
     }
 
     /**
-     * Entry point for the application.
-     *
-     * @param args command-line arguments (unused)
+     * Application entry point.
      */
     public static void main(String[] args) {
 

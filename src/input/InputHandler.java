@@ -36,6 +36,8 @@ public class InputHandler {
      * while preventing duplicate key entries.
      */
     private final Set<Integer> keyStates = new HashSet<>();
+    private final Set<Integer> keyPresses = new HashSet<>();
+
 
     /**
      * Mouse buttons that are currently being held down.
@@ -129,22 +131,40 @@ public class InputHandler {
 
             @Override
             public void keyPressed(KeyEvent e) {
-                keyStates.add(e.getKeyCode());
+
+                int keyCode = e.getKeyCode();
+
+                /*
+                 * Only register the transition from
+                 * released -> pressed.
+                 *
+                 * This prevents a held key from generating
+                 * multiple "pressed" events.
+                 */
+                synchronized (InputHandler.this) {
+
+                    if (!keyStates.contains(keyCode)) {
+                        keyPresses.add(keyCode);
+                    }
+
+                    keyStates.add(keyCode);
+                }
             }
 
             @Override
             public void keyReleased(KeyEvent e) {
-                keyStates.remove(e.getKeyCode());
+
+                synchronized (InputHandler.this) {
+                    keyStates.remove(e.getKeyCode());
+                }
             }
 
             @Override
             public void keyTyped(KeyEvent e) {
                 // Not used.
-                //
-                // FPS controls care about physical key presses,
-                // not typed characters.
             }
         });
+
 
         // Canvas must be focusable to receive keyboard events.
         component.setFocusable(true);
@@ -185,6 +205,11 @@ public class InputHandler {
                 new AbstractAction() {
                     @Override
                     public void actionPerformed(ActionEvent e) {
+
+                        if (!keyStates.contains(keyCode)) {
+                            keyPresses.add(keyCode);
+                        }
+
                         keyStates.add(keyCode);
                     }
                 });
@@ -219,7 +244,7 @@ public class InputHandler {
      * @param keyCode KeyEvent constant.
      * @return true if the key is currently held.
      */
-    public boolean isKeyDown(int keyCode) {
+    public  synchronized boolean isKeyDown(int keyCode) {
         return keyStates.contains(keyCode);
     }
 
@@ -374,6 +399,20 @@ public class InputHandler {
     public synchronized void resetMousePosition() {
         lastMouseX = null;
         lastMouseY = null;
+    }
+
+    /**
+     * Returns true exactly once when a key is pressed.
+     *
+     * Unlike isKeyDown(), this does not remain true while
+     * the key is held.
+     *
+     * @param keyCode KeyEvent constant.
+     * @return true once when the key transitions from up to down.
+     */
+    public synchronized boolean wasKeyPressed(int keyCode) {
+
+        return keyPresses.remove(keyCode);
     }
 }
 

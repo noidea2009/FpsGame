@@ -46,6 +46,14 @@ public class RaycasterRenderer {
         this.screenWidth = Math.max(1, screenWidth);
         this.screenHeight = Math.max(1, screenHeight);
     }
+
+    public int getScreenWidth() {
+        return screenWidth;
+    }
+
+    public int getScreenHeight() {
+        return screenHeight;
+    }
     /**
      * Casts a single ray from the player's position at the given angle and
      * finds the nearest wall intersection using a DDA (Digital Differential
