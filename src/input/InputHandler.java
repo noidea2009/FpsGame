@@ -4,6 +4,7 @@ import javax.swing.*;
 import java.awt.Component;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.util.HashSet;
@@ -45,6 +46,40 @@ public class InputHandler {
         bindKey(component, "SPACE", KeyEvent.VK_SPACE);
         bindKey(component, "ESCAPE", KeyEvent.VK_ESCAPE);
 
+    }
+
+    /**
+     * Binds the default game keys to an AWT Component such as Canvas.
+     *
+     * Canvas is not a JComponent, so Swing Key Bindings cannot be installed on it.
+     * This overload uses a KeyListener while keeping the existing Swing Key Bindings
+     * implementation above for JComponents.
+     *
+     * @param component the AWT component that should receive keyboard input
+     */
+    public void bindDefaultKeys(Component component) {
+        if (!(component instanceof JComponent)) {
+            component.addKeyListener(new KeyListener() {
+                @Override
+                public void keyPressed(KeyEvent e) {
+                    keyStates.add(e.getKeyCode());
+                }
+
+                @Override
+                public void keyReleased(KeyEvent e) {
+                    keyStates.remove(e.getKeyCode());
+                }
+
+                @Override
+                public void keyTyped(KeyEvent e) {
+                    // Game input is based on physical key codes, not typed characters.
+                }
+            });
+
+            component.setFocusable(true);
+        } else {
+            bindDefaultKeys((JComponent) component);
+        }
     }
 
     /**

@@ -98,6 +98,7 @@ public class Engine {
         renderer = new RaycasterRenderer(screenWidth, screenHeight, fov);
 
         input = new InputHandler();
+        input.bindDefaultKeys(canvas);
         input.bindMouseInput(canvas);
     }
 
@@ -133,6 +134,10 @@ public class Engine {
      */
     public void start() {
         initBufferStrategy();
+
+        canvas.setFocusable(true);
+        canvas.requestFocusInWindow();
+
         running = true;
         gameLoop();
     }
