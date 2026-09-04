@@ -38,6 +38,8 @@ public class Engine {
 
     private static final int TEST_TILE_SIZE = 64;
     private static final int TARGET_FPS = 60;
+    private int lastWidth;
+    private int lastHeight;
 
     private final Canvas canvas;
 
@@ -156,6 +158,10 @@ public class Engine {
 
         fpsSampleStart = System.nanoTime();
         framesThisSecond = 0;
+        lastWidth = canvas.getWidth();
+        lastHeight = canvas.getHeight();
+
+        renderer.resize(lastWidth, lastHeight);
 
         gameLoop();
 
@@ -292,6 +298,18 @@ public class Engine {
             return;
         }
 
+        int width = canvas.getWidth();
+        int height = canvas.getHeight();
+
+        if (width > 0 && height > 0 &&
+                (width != lastWidth || height != lastHeight)) {
+
+            renderer.resize(width, height);
+
+            lastWidth = width;
+            lastHeight = height;
+        }
+
         Graphics2D graphics =
                 (Graphics2D) bufferStrategy.getDrawGraphics();
 
@@ -302,8 +320,8 @@ public class Engine {
             graphics.fillRect(
                     0,
                     0,
-                    canvas.getWidth(),
-                    canvas.getHeight()
+                    width,
+                    height
             );
 
             renderer.render(
@@ -313,12 +331,12 @@ public class Engine {
             );
 
         } finally {
-
             graphics.dispose();
         }
 
         bufferStrategy.show();
     }
+
     /**
      * Captures the mouse and hides the cursor.
      */

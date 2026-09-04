@@ -17,10 +17,9 @@ import java.awt.Graphics2D;
  */
 public class RaycasterRenderer {
 
-    private final int screenWidth;
-    private final int screenHeight;
+    private int screenWidth;
+    private int screenHeight;
     private final double fov;
-
     /** Distance, in world units, beyond which walls are drawn at minimum shade. */
     private static final double MAX_VIEW_DISTANCE = 800.0;
 
@@ -43,6 +42,10 @@ public class RaycasterRenderer {
         this.fov = fov;
     }
 
+    public void resize(int screenWidth, int screenHeight) {
+        this.screenWidth = Math.max(1, screenWidth);
+        this.screenHeight = Math.max(1, screenHeight);
+    }
     /**
      * Casts a single ray from the player's position at the given angle and
      * finds the nearest wall intersection using a DDA (Digital Differential
@@ -146,6 +149,7 @@ public class RaycasterRenderer {
      * @param map    the world map raycast against
      */
     public void render(Graphics2D g, Player player, WorldMap map) {
+
         for (int column = 0; column < screenWidth; column++) {
             double cameraOffset = ((double) column / screenWidth) - 0.5;
             double rayAngle = player.getDirectionAngle() + cameraOffset * fov;
