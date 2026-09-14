@@ -125,7 +125,7 @@ public class Engine {
                 startX,
                 startY,
                 0.0,
-                100.0,
+                200.0,
                 1.5
         );
 
