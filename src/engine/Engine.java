@@ -10,7 +10,13 @@ import java.awt.event.KeyEvent;
 import java.awt.image.BufferStrategy;
 
 import java.awt.image.BufferedImage;
-
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
         /**
  * Main game engine.
  *
@@ -55,6 +61,21 @@ public class Engine {
     private boolean mouseCaptured;
     private Cursor invisibleCursor;
 
+    /** Regex matching one or more whitespace characters (spaces, tabs) separating tile values. */
+    private static final Pattern TOKEN_DELIMITER = Pattern.compile("\\s+");
+
+    /** Prefix marking a map file line as a comment to be skipped. */
+    private static final String COMMENT_PREFIX = "#";
+
+    /** Byte order mark that some editors prepend to UTF-8 files. */
+    private static final String BYTE_ORDER_MARK = "\uFEFF";
+
+    /** Filesystem path of the map file loaded at startup. */
+    private static final String MAP_FILE_PATH = "maps/level1.txt";
+
+    /** Grid of tile values parsed from the map file; 0 is empty space, 1 or greater is a wall type. */
+    private int[][] mapGrid;
+
     public Engine(Canvas canvas) {
         this.canvas = canvas;
         this.running = false;
@@ -98,25 +119,69 @@ public class Engine {
     }
 
     /**
+     * Reads a map file and stores the parsed tile values in {@link #mapGrid}.
+     * Each non-blank, non-comment line becomes one grid row. Row-length
+     * consistency and negative tile values are validated later by
+     * {@link WorldMap#loadMap(int[][], int)}.
+     *
+     * @param path location of the map text file
+     * @throws IOException              if the file cannot be read
+     * @throws IllegalArgumentException if a token is not an integer or the file contains no rows
+     */
+    private void loadMapGrid(Path path) throws IOException {
+        List<String> lines = Files.readAllLines(path);
+        List<int[]> rows = new ArrayList<>();
+
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i).replace(BYTE_ORDER_MARK, "").strip();
+             // Blank lines and comment lines carry no tile data.
+            if (line.isEmpty() || line.startsWith(COMMENT_PREFIX)) {
+                continue;
+            }
+            rows.add(parseRow(line, i + 1));
+        }
+        if (rows.isEmpty()) {
+            throw new IllegalArgumentException("Map file contains no grid rows: " + path);
+        }
+        mapGrid = rows.toArray(new int[0][]);
+    }
+    /**
+     * Splits a single map file line on whitespace and converts each token
+     * to an integer tile value.
+     *
+     * @param line       trimmed, non-empty line of the map file
+     * @param lineNumber one-based line number in the file, used in error messages
+     * @return the tile values of the row, in column order
+     * @throws IllegalArgumentException if any token is not a valid integer
+     */
+    private int[] parseRow(String line, int lineNumber) {
+        String[] tokens = TOKEN_DELIMITER.split(line);
+        int[] row = new int[tokens.length];
+
+        for (int col = 0; col < tokens.length; col++) {
+            try {
+                row[col] = Integer.parseInt(tokens[col]);
+                    } catch (NumberFormatException e) {
+                        throw new IllegalArgumentException(
+                                "Invalid tile value '" + tokens[col] + "' at line " + lineNumber
+                                        + ", column " + (col + 1) + ".", e);
+                    }
+                }
+        return row;
+    }
+    /**
      * Creates the test world, player, renderer and input handler.
      */
     private void initTestScene() {
-
-        int[][] grid = {
-                {1, 1, 1, 1, 1, 1, 1, 1, 1, 1},
-                {1, 0, 2, 0, 0, 0, 0, 0, 0, 1},
-                {1, 0, 2, 2, 0, 0, 0, 0, 0, 1},
-                {1, 0, 2, 0, 0, 0, 0, 0, 0, 1},
-                {1, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-                {1, 0, 0, 0, 0, 0, 0, 0, 0, 1},
-                {1, 0, 0, 0, 0, 0, 3, 0, 0, 1},
-                {1, 0, 0, 0, 0, 0, 3, 0, 0, 1},
-                {1, 0, 0, 0, 0, 3, 3, 0, 0, 1},
-                {1, 1, 1, 1, 1, 1, 1, 1, 1, 1}
-        };
+        try {
+            loadMapGrid(Path.of(MAP_FILE_PATH));
+        } catch (IOException e) {
+            throw new UncheckedIOException("Failed to read map file: " + MAP_FILE_PATH, e);
+        }
 
         map = new WorldMap();
-        map.loadMap(grid, TEST_TILE_SIZE);
+        map.loadMap(mapGrid, TEST_TILE_SIZE);
+
 
         double startX = 5.5 * TEST_TILE_SIZE;
         double startY = 5.5 * TEST_TILE_SIZE;
