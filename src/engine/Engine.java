@@ -17,7 +17,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
-        /**
+/**
  * Main game engine.
  *
  * Handles:
@@ -75,6 +75,15 @@ public class Engine {
 
     /** Grid of tile values parsed from the map file; 0 is empty space, 1 or greater is a wall type. */
     private int[][] mapGrid;
+
+    /** Tile value in the map file that marks the player spawn position. */
+    private static final int SPAWN_MARKER = 9;
+
+    /** World-space x coordinate of the player spawn, derived from the marker tile. */
+    private double spawnX;
+
+    /** World-space y coordinate of the player spawn, derived from the marker tile. */
+    private double spawnY;
 
     public Engine(Canvas canvas) {
         this.canvas = canvas;
@@ -144,6 +153,40 @@ public class Engine {
             throw new IllegalArgumentException("Map file contains no grid rows: " + path);
         }
         mapGrid = rows.toArray(new int[0][]);
+        extractSpawn();
+    }
+    /**
+     * Locates the single spawn marker tile in {@link #mapGrid}, converts its
+     * grid position to the world-space center of that tile, and replaces the
+     * marker with 0 so the spawn tile is walkable empty space.
+     *
+     * @throws IllegalArgumentException if the grid contains no spawn marker
+     *                                  or more than one spawn marker
+     */
+    private void extractSpawn() {
+        int foundCol = -1;
+        int foundRow = -1;
+        int markerCount = 0;
+
+        for (int row = 0; row < mapGrid.length; row++) {
+            for (int col = 0; col < mapGrid[row].length; col++) {
+                if (mapGrid[row][col] == SPAWN_MARKER) {
+                    foundCol = col;
+                    foundRow = row;
+                    markerCount++;
+                    mapGrid[row][col] = 0;
+                }
+            }
+        }
+
+        if (markerCount != 1) {
+            throw new IllegalArgumentException(
+                    "Map must contain exactly one spawn marker (" + SPAWN_MARKER
+                            + "); found " + markerCount + ".");
+        }
+
+        spawnX = (foundCol + 0.5) * TEST_TILE_SIZE;
+        spawnY = (foundRow + 0.5) * TEST_TILE_SIZE;
     }
     /**
      * Splits a single map file line on whitespace and converts each token
@@ -187,8 +230,8 @@ public class Engine {
         double startY = 5.5 * TEST_TILE_SIZE;
 
         player = new Player(
-                startX,
-                startY,
+                spawnX,
+                spawnY,
                 0.0,
                 200.0,
                 1.5
